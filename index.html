@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Pro: Logo & Color</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin-top: 20px; background: #eef2f5; color: #333; }
+        .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 350px; }
+        h2 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
+        
+        /* Inputs */
+        label { font-weight: 600; font-size: 0.9em; margin-bottom: 5px; display: block; margin-top: 15px; }
+        select, input, textarea, button { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        
+        /* Color Row */
+        .row { display: flex; justify-content: space-between; gap: 10px; }
+        .col { width: 48%; }
+        input[type="color"] { height: 40px; padding: 2px; cursor: pointer; }
+
+        /* Logo Upload */
+        input[type="file"] { padding: 5px; background: #fafafa; }
+
+        /* Buttons */
+        button { background-color: #3498db; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; padding: 12px; }
+        button:hover { background-color: #2980b9; }
+        button#downloadBtn { background-color: #27ae60; display: none; }
+        
+        /* QR Output */
+        #qrcode { margin-top: 20px; display: flex; justify-content: center; align-items: center; min-height: 220px; background: #fafafa; border: 2px dashed #ddd; border-radius: 8px; padding: 10px; }
+        canvas { max-width: 100%; }
+        
+        /* Hidden elements for processing */
+        #generatedImg { display: none; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h2>QR Pro with Logo</h2>
+    
+    <label>Type:</label>
+    <select id="qrType" onchange="updateInputs()">
+        <option value="text">Text / URL</option>
+        <option value="wifi">Wi-Fi Network</option>
+        <option value="sms">SMS Message</option>
+        <option value="email">Email</option>
+        <option value="vcard">Contact (vCard)</option>
+    </select>
+
+    <div id="inputs">
+        <input type="text" id="textData" placeholder="Enter text or URL">
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <label>QR Color</label>
+            <input type="color" id="fgColor" value="#000000">
+        </div>
+        <div class="col">
+            <label>Background</label>
+            <input type="color" id="bgColor" value="#ffffff">
+        </div>
+    </div>
+
+    <label>Upload Logo (Optional):</label>
+    <input type="file" id="logoInput" accept="image/*">
+
+    <button onclick="generateQR()">Generate QR Code</button>
+    
+    <div id="qrcode"></div>
+    <button id="downloadBtn" onclick="downloadQR()">Download PNG</button>
+</div>
+
+<script>
+    // --- 1. CONFIGURATION ---
+    const inputForms = {
+        text: `<input type="text" id="textData" placeholder="Enter URL or Text">`,
+        wifi: `<input type="text" id="ssid" placeholder="Network Name"><input type="password" id="password" placeholder="Password"><select id="encryption"><option value="WPA">WPA/WPA2</option><option value="nopass">No Password</option></select>`,
+        sms: `<input type="tel" id="phone" placeholder="Phone"><textarea id="message" placeholder="Message"></textarea>`,
+        email: `<input type="email" id="email" placeholder="Email"><input type="text" id="subject" placeholder="Subject"><textarea id="body" placeholder="Body"></textarea>`,
+        vcard: `<input type="text" id="firstName" placeholder="First Name"><input type="text" id="lastName" placeholder="Last Name"><input type="tel" id="mobile" placeholder="Mobile"><input type="email" id="vEmail" placeholder="Email">`
+    };
+
+    let userLogo = null; // Variable to store the uploaded logo image
+
+    // --- 2. EVENT LISTENERS ---
+    
+    // Switch inputs when dropdown changes
+    function updateInputs() {
+        document.getElementById("inputs").innerHTML = inputForms[document.getElementById("qrType").value];
+        document.getElementById("downloadBtn").style.display = "none";
+        document.getElementById("qrcode").innerHTML = "";
+    }
+
+    // Handle Logo Upload
+    document.getElementById('logoInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                userLogo = new Image();
+                userLogo.src = event.target.result;
+                userLogo.onload = () => console.log("Logo loaded"); // Wait for load
+            };
+            reader.readAsDataURL(file);
+        } else {
+            userLogo = null;
+        }
+    });
+
+    // --- 3. GENERATION LOGIC ---
+
+    function generateQR() {
+        const type = document.getElementById("qrType").value;
+        const fgColor = document.getElementById("fgColor").value;
+        const bgColor = document.getElementById("bgColor").value;
+        let text = "";
+
+        // Construct Data String
+        if (type === "text") text = document.getElementById("textData").value;
+        else if (type === "wifi") text = `WIFI:S:${document.getElementById("ssid").value};T:${document.getElementById("encryption").value};P:${document.getElementById("password").value};;`;
+        else if (type === "sms") text = `SMSTO:${document.getElementById("phone").value}:${document.getElementById("message").value}`;
+        else if (type === "email") text = `MATMSG:TO:${document.getElementById("email").value};SUB:${document.getElementById("subject").value};BODY:${document.getElementById("body").value};;`;
+        else if (type === "vcard") text = `BEGIN:VCARD\nVERSION:3.0\nN:${document.getElementById("lastName").value};${document.getElementById("firstName").value}\nTEL:${document.getElementById("mobile").value}\nEMAIL:${document.getElementById("vEmail").value}\nEND:VCARD`;
+
+        if (!text) { alert("Please enter data"); return; }
+
+        const container = document.getElementById("qrcode");
+        container.innerHTML = ""; // Clear previous
+
+        // Generate base QR
+        // We put it in a temporary div first to let the library do its work
+        const tempDiv = document.createElement("div");
+        new QRCode(tempDiv, {
+            text: text,
+            width: 250,
+            height: 250,
+            colorDark : fgColor,
+            colorLight : bgColor,
+            correctLevel : QRCode.CorrectLevel.H // HIGH ERROR CORRECTION IS CRITICAL FOR LOGOS
+        });
+
+        // The library creates a canvas inside tempDiv. We need to wait a tiny bit for it to render.
+        setTimeout(() => {
+            const qrCanvas = tempDiv.querySelector("canvas");
+            if (qrCanvas) {
+                // If user uploaded a logo, we draw it on top
+                if (userLogo) {
+                    const ctx = qrCanvas.getContext("2d");
+                    const logoSize = 50; // Size of logo (approx 20% of QR size)
+                    const pos = (qrCanvas.width / 2) - (logoSize / 2);
+
+                    // Draw Logo Image
+                    ctx.drawImage(userLogo, pos, pos, logoSize, logoSize);
+                }
+                
+                // Append the final canvas to the visible container
+                container.appendChild(qrCanvas);
+                document.getElementById("downloadBtn").style.display = "block";
+            }
+        }, 100);
+    }
+
+    // --- 4. DOWNLOAD LOGIC ---
+    function downloadQR() {
+        const canvas = document.querySelector("#qrcode canvas");
+        if(canvas) {
+            const link = document.createElement("a");
+            link.download = 'custom-qr.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+    }
+</script>
+</body>
+</html>
